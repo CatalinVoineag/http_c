@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -55,35 +54,77 @@ int main() {
     }
 
     char message[4096];
-    int received = 0;
+    memset(message, 0, sizeof(message));
+    ssize_t received = 0;
+
+    request_t request = {
+      .bytes = 0,
+      .header_done = false,
+      .headers = hash_init()
+    };
 
     while (received < sizeof(message)) {
-      int bites = recv(client_socket, message + received, 8, 0);
+      ssize_t bytes = recv(client_socket, message + received, 8, 0);
 
-      if (bites < 0) {
-        printf("receiving message failed at received: %d \n", received);
+      if (bytes < 0) {
+        printf("receiving message failed at received: %zd \n", received);
         close(client_socket);
         close(server_socket);
         return 1;
       }
 
-      // client closed connection
-      if (bites == 0) {
+      if (bytes == 0) {
         break;
       }
 
-      received += bites;
+      char *str_end = strstr(message, "\r\n");
+      if (str_end) {
+        int end_index = message - str_end;
+        message[end_index] = '\0';
+      }
+
+      if (strstr(message, "\r\n") != NULL && request.header_done == false) {
+        request_from_reader(message, &request);
+        request.header_done = true;
+      } 
+
+      received += bytes;
       message[received] = '\0';
+
+      if (strstr(message, "\r\n\r\n")) {
+        parse_headers(message, &request);
+        break;
+      }
     }
 
-    request_line_t request_line = request_from_reader(message);
-    printf(
-      "REQUST LINE method: %s target: %s version: %s\n",
-      request_line.method,
-      request_line.target,
-      request_line.version
-    );
+    if (request.error ) {
+      printf("ERROR %s\n", request.error);
+      close(client_socket);
+      break;
+    } else if (request.request_line.error){
+      printf("ERROR %s\n", request.request_line.error);
+      close(client_socket);
+      break;
+    }
+
+    printf("Request line:\n");
+    printf("- Method: %s\n", request.request_line.method);
+    printf("- Target: %s\n", request.request_line.target);
+    printf("- Version: %s\n", request.request_line.version);
+    printf("Headers :\n");
+    for (int i = 0; i < request.headers.size; i++) {
+      printf("- %s: %s\n", request.headers.nodes[i]->key, request.headers.nodes[i]->value);
+    }
+
     // printf("CLIENT MESSAGE: %s", message);
+    printf("DONE WITH THE REQUEST \n");
+
+
+    // Need to read 8 bytes at a time until the end of the line
+    // Format request line
+    // Read 8 bytes at a time until you get to the end of the headers
+    // Format the headers
+    // Check the go solution
 
     // // Send message to the client
     // if (send(client_socket, message, strlen(message), 0) < 0) {
@@ -93,9 +134,9 @@ int main() {
     //   return 1;
     // }
 
-    free(request_line.method);
-    free(request_line.target);
-    free(request_line.version);
+    // free(request_line.method);
+    // free(request_line.target);
+    // free(request_line.version);
 
     close(client_socket);
   }

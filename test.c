@@ -54,3 +54,16 @@ Test(request_from_reader, invalid_request) {
   request_line_t request_line = request_from_reader(input);
   cr_assert(eq(str, request_line.error, "Request needs to be HTTP"));
 };
+
+Test(read_bytes, valid) {
+  char *input1 = "test";
+  char *input2 = "test-";
+  char *input3 = "test-test";
+
+  request_t request = { .bytes = 0 };
+
+  read_bytes(input1, &request, 4);
+  read_bytes(input2, &request, 1);
+  read_bytes(input3, &request, 4);
+  cr_assert(eq(str, request.header, "test-test"));
+};
