@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -32,7 +33,6 @@ int main() {
     return 1;
   }
 
-  // Listen for clients and allow the accept function to be used
   // Allow 4 client with queueing
   if (listen(server_socket, 4) < 0){
     printf("listening failed \n");
@@ -43,7 +43,6 @@ int main() {
   printf("Listening on 8080 \n");
 
   while (1) {
-    // Wait for client to connect, then open a socket
     int client_socket = accept(server_socket, NULL, NULL);
 
     if (client_socket < 0) {
@@ -56,11 +55,14 @@ int main() {
     char message[4096];
     memset(message, 0, sizeof(message));
     ssize_t received = 0;
+    char *sep = "\r\n\r\n";
 
     request_t request = {
       .bytes = 0,
       .header_done = false,
-      .headers = hash_init()
+      .headers_done = false,
+      .headers = hash_init(),
+      .state = REQUEST_LINE
     };
 
     while (received < sizeof(message)) {
@@ -77,32 +79,52 @@ int main() {
         break;
       }
 
-      char *str_end = strstr(message, "\r\n");
-      if (str_end) {
-        int end_index = message - str_end;
-        message[end_index] = '\0';
+      int content_len_idx = hash_get_node_index("Content-Length", &request.headers);
+
+      switch(request.state) {
+        case REQUEST_LINE: 
+          if (strstr(message, "\r\n") != NULL ) { // && request.header_done == false) {
+            request_from_reader(message, &request);
+            // request.header_done = true;
+            request.state = HEADERS;
+          } 
+        case HEADERS: 
+          if (strstr(message, sep)) { 
+            parse_headers(message, &request);
+            content_len_idx = hash_get_node_index("Content-Length", &request.headers);
+
+            if (content_len_idx >= 0) {
+              request.state = BODY;
+            } else {
+              request.state = DONE;
+              break;
+            }
+          }
+        case BODY: 
+          if (strstr(message, sep)) {
+            char *sep_message = strstr(message, sep);
+
+            if (sep_message) {
+              int len = strlen(message);
+              char *rest = sep_message + strlen(sep);
+              parse_body(rest, &request);
+            }
+            int content_len = atoi(request.headers.nodes[content_len_idx]->value);
+            if (content_len == strlen(request.body)) {
+              request.state = DONE;
+            }
+          }
+        case DONE: 
+          break;
       }
 
-      if (strstr(message, "\r\n") != NULL && request.header_done == false) {
-        request_from_reader(message, &request);
-        request.header_done = true;
-      } 
+      if (request.state == DONE) { break; }
 
       received += bytes;
-      message[received] = '\0';
-
-      if (strstr(message, "\r\n\r\n")) {
-        parse_headers(message, &request);
-        break;
-      }
     }
 
-    if (request.error ) {
+    if (request.error) {
       printf("ERROR %s\n", request.error);
-      close(client_socket);
-      break;
-    } else if (request.request_line.error){
-      printf("ERROR %s\n", request.request_line.error);
       close(client_socket);
       break;
     }
@@ -115,32 +137,14 @@ int main() {
     for (int i = 0; i < request.headers.size; i++) {
       printf("- %s: %s\n", request.headers.nodes[i]->key, request.headers.nodes[i]->value);
     }
+    if (request.body) {
+      printf("BODY: %s\n", request.body);
+    }
 
-    // printf("CLIENT MESSAGE: %s", message);
-    printf("DONE WITH THE REQUEST \n");
-
-
-    // Need to read 8 bytes at a time until the end of the line
-    // Format request line
-    // Read 8 bytes at a time until you get to the end of the headers
-    // Format the headers
-    // Check the go solution
-
-    // // Send message to the client
-    // if (send(client_socket, message, strlen(message), 0) < 0) {
-    //   printf("sending message failed \n");
-    //   close(client_socket);
-    //   close(server_socket);
-    //   return 1;
-    // }
-
-    // free(request_line.method);
-    // free(request_line.target);
-    // free(request_line.version);
-
+    // printf("CLIENT MESSAGE: %s\n", message);
+    request.state = REQUEST_LINE;
     close(client_socket);
   }
-
 
   close(server_socket);
   return 0;

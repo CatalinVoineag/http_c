@@ -1,7 +1,5 @@
 #include <ctype.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "hash.c"
@@ -10,13 +8,14 @@ typedef struct RequestLine {
   char* method;
   char* target;
   char version[4];
-  char* error;
 } request_line_t;
 
 typedef struct Headers {
   char* host;
   char* error;
 } headers_t;
+
+typedef enum { REQUEST_LINE, HEADERS, BODY, DONE } state_t;
 
 typedef struct Request {
   char header[4096];
@@ -25,7 +24,19 @@ typedef struct Request {
   request_line_t request_line;
   hash_t headers;
   bool header_done;
+  bool headers_done;
+  state_t state;
+  char* body;
 } request_t;
+
+void trim(char *string) {
+  int i = 0;
+  int j = 0;
+
+  while (string[i] == ' ') i++;
+
+  while ((string[j++] = string[i++]));
+}
 
 char* downcase(char* string) {
   for (int i = 0; i < strlen(string); i++) {
@@ -41,8 +52,8 @@ void set_version(request_line_t *request_line, char *string) {
     request_line->version[0] = version[0]; // 1
     request_line->version[1] = version[1]; // .
     request_line->version[2] = version[2]; // 1
+    request_line->version[3] = '\0';
   }
-  printf("SET VERSION %s\n", request_line->version);
 }
 
 char * delete_chars(char *initial_string, char *pattern) {
@@ -59,16 +70,16 @@ void del_chars(char *initial_string, char *pattern) {
   memmove(initial_string, initial_string + pattern_len, pattern_len + 1);
 }
 
-void validate(request_line_t *request_line) {
+void validate(request_line_t *request_line, request_t *request) {
   for (int i = 0; i < strlen(request_line->method); i++) {
     if (!isupper(request_line->method[i])) {
-      request_line->error = "Method invalid";
+      request->error = "Method invalid";
       return;
     }
   }
 
   if (strcmp(request_line->version, "1.1") != 0) {
-    request_line->error = "Request version needs to be HTTP 1.1";
+    request->error = "Request version needs to be HTTP 1.1";
     return;
   }
 } 
@@ -80,11 +91,8 @@ void request_from_reader(char *line, request_t *request) {
   char *token = strtok(strdup(line), " ");
   int i = 0;
   while (token != NULL) {
-    if (i > 2) {
-      request->error = "Too many items in the Request Line";
-      free(items);
-      return;
-    }
+    if (i > 2) { break; }
+
     items[i] = strdup(token);
     i++;
     token = strtok(NULL, " ");
@@ -101,7 +109,7 @@ void request_from_reader(char *line, request_t *request) {
   set_version(&request_line, items[2]);
   free(items);
 
-  validate(&request_line);
+  validate(&request_line, request);
   request->request_line = request_line;
 
   return;
@@ -123,6 +131,7 @@ void partition(char *string, char *delimiter, hash_t *hash) {
 
       char *key = arr[0]; 
       char *value = arr[1]; 
+      trim(value);
 
       int node_index = hash_get_node_index(key, hash);
       if (node_index >= 0) {
@@ -137,10 +146,25 @@ void partition(char *string, char *delimiter, hash_t *hash) {
 } 
 
 void parse_headers(char *message, request_t *request) {
-  char *token = strtok(message, "\r\n");
+  char *token = strtok(strdup(message), "\r\n");
 
   while (token != NULL) {
     partition(token, ":", &request->headers);
     token = strtok(NULL, "\r\n");
+  }
+}
+
+void parse_body(char *message, request_t *request) {
+  if (request->body == NULL) {
+    request->body = strdup(message);
+  } else {
+    int body_len = strlen(request->body);
+    char *mess = strdup(message);
+    int remaining = strlen(mess) - body_len;
+
+    if (remaining < 0) remaining = 0;
+
+    memcpy(request->body + body_len, mess + body_len, remaining);
+    request->body[body_len + remaining] = '\0';
   }
 }
