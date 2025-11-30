@@ -28,7 +28,7 @@ void hash_add(char* key, char* value, hash_t *hash) {
 
   int node_index = hash_get_node_index(key, hash);
   if (node_index >= 0) {
-    hash->nodes[node_index]->value = value;
+    hash->nodes[node_index]->value = strdup(value);
     return;
   }
 
@@ -60,6 +60,19 @@ void hash_add(char* key, char* value, hash_t *hash) {
   } 
 
   hash->size++;
+  return;
+}
+
+void hash_append(char* key, char* value, hash_t *hash) {
+  if (!hash || !key || !value) return;
+
+  int node_index = hash_get_node_index(key, hash);
+  if (node_index >= 0) {
+    char *formatted = strcat(value, ", ");
+    char *concat = strcat(formatted, hash->nodes[node_index]->value);
+    hash->nodes[node_index]->value = strdup(concat);
+  } 
+
   return;
 }
 

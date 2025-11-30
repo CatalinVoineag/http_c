@@ -121,7 +121,15 @@ void partition(char *string, char *delimiter, hash_t *hash) {
       arr[1] = memcpy(right, string + (i +1), right_len);
       arr[1][right_len] = '\0';
 
-      hash_add(arr[0], arr[1], hash); 
+      char *key = arr[0]; 
+      char *value = arr[1]; 
+
+      int node_index = hash_get_node_index(key, hash);
+      if (node_index >= 0) {
+        hash_append(key, value, hash); 
+      } else {
+        hash_add(key, value, hash); 
+      }
 
       break;
     }
