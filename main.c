@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include "request_line.c"
+#include "response.c"
 
 int main() {
   int server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -118,7 +119,15 @@ int main() {
           break;
       }
 
-      if (request.state == DONE) { break; }
+      if (request.state == DONE) {
+        response_t response = { .headers = hash_init() };
+        write_response_body(&response, &request);
+        char *body = response_body(&response);
+
+        send(client_socket, body, strlen(body), 0);
+        free(body);
+        break;
+      }
 
       received += bytes;
     }

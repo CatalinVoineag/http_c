@@ -4,16 +4,14 @@
 #include <unistd.h>
 #include "hash.c"
 
+#ifndef REQUEST_LINE_H
+#define REQUEST_LINE_H
+
 typedef struct RequestLine {
   char* method;
   char* target;
   char version[4];
 } request_line_t;
-
-typedef struct Headers {
-  char* host;
-  char* error;
-} headers_t;
 
 typedef enum { REQUEST_LINE, HEADERS, BODY, DONE } state_t;
 
@@ -168,3 +166,5 @@ void parse_body(char *message, request_t *request) {
     request->body[body_len + remaining] = '\0';
   }
 }
+
+#endif

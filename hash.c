@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef HASH_H
+#define HASH_H
+
 typedef struct Node {
   char* key;
   char* value;
@@ -98,3 +101,5 @@ int hash_delete(char* key, hash_t *hash) {
 
   return index;
 }
+
+#endif
