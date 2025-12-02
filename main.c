@@ -86,7 +86,7 @@ int main() {
         case REQUEST_LINE: 
           if (strstr(message, "\r\n") != NULL ) { // && request.header_done == false) {
             request_from_reader(message, &request);
-            // request.header_done = true;
+            // /yourproblem
             request.state = HEADERS;
           } 
         case HEADERS: 
