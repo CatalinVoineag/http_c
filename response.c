@@ -83,11 +83,8 @@ void handle_special_requests(response_t *response, request_t *request, special_r
     case MY_PROBLEM:
       response->body = response_400;
       break;
-    case NVIM:
-      response->body = response_200;
-      break;
     default:
-      hash_add("Content-Length", "0", &response->headers); 
+      response->body = response_200;
       return;
     }
 
